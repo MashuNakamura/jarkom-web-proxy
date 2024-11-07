@@ -8,6 +8,8 @@ server_port = 8080  # Port proxy
 favicon_url = "png.pngtree.com"  # Domain untuk favicon
 favicon_path = "/png-vector/20201223/ourmid/pngtree-outdoor-camping-camping-icon-logo-vector-png-image_2589489.jpg"
 
+# Bagian Code Download ke Client---------------------------------------------------------------------------------------- #
+
 # Fungsi untuk mengunduh favicon dari server asal
 def download_favicon():
     filename = "favicon.jpg"  # Ganti ekstensi sesuai dengan format gambar
@@ -20,7 +22,7 @@ def download_favicon():
             response_data = b"".join(iter(lambda: c.recv(4096), b""))
             with open(filename, "wb") as tmpFile:
                 tmpFile.write(response_data)
-            print("Favicon downloaded and cached.")
+            print("Icon Downloaded and Cached.")
     except Exception as e:
         print("Error downloading favicon:", e)
 
@@ -28,7 +30,7 @@ def download_favicon():
 if not os.path.exists("favicon.jpg"):
     download_favicon()
 
-# Membuat file index.html yang berisi gambar favicon.jpg
+# Membuat file index.html yang berisi gambar favicon.jpg dari server asal
 with open("index.html", "w") as f:
     f.write("""<!DOCTYPE html>
 <html lang="en">
@@ -42,12 +44,20 @@ with open("index.html", "w") as f:
     <img src="https://png.pngtree.com/png-vector/20201223/ourmid/pngtree-outdoor-camping-camping-icon-logo-vector-png-image_2589489.jpg" alt="Favicon">
 </body>
 </html>""")
+    
+# Batas Code Download ke Client----------------------------------------------------------------------------------------- #
+
+# Bagian Setup Server Proxy -------------------------------------------------------------------------------------------- #
 
 # Set up dan start proxy server socket
 tcpSerSock = socket(AF_INET, SOCK_STREAM)
 tcpSerSock.bind((server_ip, server_port))
 tcpSerSock.listen(5)
 print(f'Proxy server is ready to serve at {server_ip} on port {server_port}')
+
+# Batas Setup Server Proxy --------------------------------------------------------------------------------------------- #
+
+# Bagian Pengecekan pada Client ---------------------------------------------------------------------------------------- #
 
 # Memulai Loop tanpa henti untuk menerima koneksi dari klien
 while True:
@@ -72,8 +82,8 @@ while True:
             continue
 
         # Mengambil URL dari permintaan klien
-        url = request_parts[1]
-        parsed_url = urllib.parse.urlparse(url)
+        url = request_parts[1] # Ekstrak Url Request 
+        parsed_url = urllib.parse.urlparse(url) # Memecah Url menjadi bagian Terstruktur
         host = parsed_url.netloc  # Mendapatkan host dari URL
         path = parsed_url.path or '/'  # Mendapatkan path atau default ke /
 
@@ -107,12 +117,18 @@ while True:
                         break
                     tcpCliSock.sendall(response_data)
 
+# Batas Pengecekan pada Client ----------------------------------------------------------------------------------------- #
+
+# Bagian Pengecekan kalau Error dan Kalau Selesai Request -------------------------------------------------------------- #
+
     except Exception as e:
         print("Error:", e)
         tcpCliSock.sendall(b"HTTP/1.0 404 Not Found\r\n\r\nFile not found")
     
     finally:
         tcpCliSock.close()
+
+# Batas Pengecekan kalau Error dan Kalau Selesai Request -------------------------------------------------------------- #
 
 # Menutup koneksi server saat loop berhenti
 tcpSerSock.close()
