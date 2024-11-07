@@ -1,33 +1,34 @@
-# Mengimport modul socket untuk membuat koneksi jaringan antar server dan client
 from socket import *
 import os
+import urllib.parse
 
 # Deklarasi Server IP dan Server Port
 server_ip = '0.0.0.0'  # IP Local Host
 server_port = 8080  # Port proxy
-favicon_url = "example.com"  # Ganti dengan domain yang memiliki favicon.ico yang ingin diunduh
+favicon_url = "png.pngtree.com"  # Domain untuk favicon
+favicon_path = "/png-vector/20201223/ourmid/pngtree-outdoor-camping-camping-icon-logo-vector-png-image_2589489.jpg"
 
 # Fungsi untuk mengunduh favicon dari server asal
-def download_favicon(hostn):
-    filename = "favicon.ico"
+def download_favicon():
+    filename = "favicon.jpg"  # Ganti ekstensi sesuai dengan format gambar
     try:
         with socket(AF_INET, SOCK_STREAM) as c:
-            c.connect((hostn, 80))
-            # Mengirim permintaan untuk mengunduh favicon.ico
-            c.sendall(b"GET /favicon.ico HTTP/1.0\r\nHost: %b\r\n\r\n" % hostn.encode())
+            c.connect((favicon_url, 80))
+            # Mengirim permintaan untuk mengunduh favicon
+            c.sendall(f"GET {favicon_path} HTTP/1.0\r\nHost: {favicon_url}\r\n\r\n".encode())
             # Membaca respons data dan menyimpannya
             response_data = b"".join(iter(lambda: c.recv(4096), b""))
             with open(filename, "wb") as tmpFile:
                 tmpFile.write(response_data)
-            print("Favicon.ico downloaded and cached.")
+            print("Favicon downloaded and cached.")
     except Exception as e:
         print("Error downloading favicon:", e)
 
-# Unduh favicon.ico saat server proxy dijalankan jika belum ada
-if not os.path.exists("favicon.ico"):
-    download_favicon(favicon_url)
+# Unduh favicon.jpg saat server proxy dijalankan jika belum ada
+if not os.path.exists("favicon.jpg"):
+    download_favicon()
 
-# Membuat file index.html yang berisi gambar favicon.ico
+# Membuat file index.html yang berisi gambar favicon.jpg
 with open("index.html", "w") as f:
     f.write("""<!DOCTYPE html>
 <html lang="en">
@@ -38,7 +39,7 @@ with open("index.html", "w") as f:
 </head>
 <body>
     <h1>Hello World!</h1>
-    <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS9X34V_1sfElRuZpF--9DuST9YGHVVWb6fqw&s" alt="Example">
+    <img src="https://png.pngtree.com/png-vector/20201223/ourmid/pngtree-outdoor-camping-camping-icon-logo-vector-png-image_2589489.jpg" alt="Favicon">
 </body>
 </html>""")
 
@@ -70,28 +71,46 @@ while True:
             tcpCliSock.close()
             continue
 
-        # Mengambil nama file dari permintaan klien
-        filename = request_parts[1].partition("/")[2] or "index.html"
+        # Mengambil URL dari permintaan klien
+        url = request_parts[1]
+        parsed_url = urllib.parse.urlparse(url)
+        host = parsed_url.netloc  # Mendapatkan host dari URL
+        path = parsed_url.path or '/'  # Mendapatkan path atau default ke /
 
-        # Cek apakah file adalah index.html atau favicon.ico dan sudah ada di cache
-        if filename == "index.html" and os.path.exists("index.html"):
+        # Cek apakah klien mengakses root (localhost:8080)
+        if path == "/":
+            path = "/index.html"  # Arahkan ke index.html
+
+        # Cek apakah file adalah index.html atau favicon.jpg dan sudah ada di cache
+        if path == "/index.html" and os.path.exists("index.html"):
             with open("index.html", "rb") as f:
                 tcpCliSock.sendall(b"HTTP/1.0 200 OK\r\nContent-Type:text/html\r\n\r\n")
                 tcpCliSock.sendfile(f)
             print("index.html served.")
 
-        elif filename == "favicon.ico" and os.path.exists("favicon.ico"):
-            with open("favicon.ico", "rb") as f:
-                tcpCliSock.sendall(b"HTTP/1.0 200 OK\r\nContent-Type:image/x-icon\r\n\r\n")
+        elif path == "/favicon.jpg" and os.path.exists("favicon.jpg"):
+            with open("favicon.jpg", "rb") as f:
+                tcpCliSock.sendall(b"HTTP/1.0 200 OK\r\nContent-Type:image/jpeg\r\n\r\n")
                 tcpCliSock.sendfile(f)
-            print("favicon.ico served from cache.")
+            print("favicon.jpg served from cache.")
 
-    # Pesan keluar jika ada kesalahan
+        else:
+            # Jika tidak ada di cache, teruskan permintaan ke server asal
+            with socket(AF_INET, SOCK_STREAM) as origin_sock:
+                origin_sock.connect((host, 80))  # Menghubungkan ke port 80 server asal
+                origin_sock.sendall(f"GET {path} HTTP/1.0\r\nHost: {host}\r\n\r\n".encode())
+                
+                # Menerima respons dari server asal dan mengirimkannya kembali ke klien
+                while True:
+                    response_data = origin_sock.recv(4096)
+                    if not response_data:
+                        break
+                    tcpCliSock.sendall(response_data)
+
     except Exception as e:
         print("Error:", e)
         tcpCliSock.sendall(b"HTTP/1.0 404 Not Found\r\n\r\nFile not found")
     
-    # Menutup koneksi klien
     finally:
         tcpCliSock.close()
 
