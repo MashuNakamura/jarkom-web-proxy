@@ -22,14 +22,14 @@ while True:  # Memulai Loop tanpa stop untuk menerima koneksi dari klien
         # Memastikan data yang diterima tidak kosong (Memastikan ada pengguna)
         if not request_data:
             print("No data received from client.")
-            tcpCliSock.close() # Akan di close dan dimulai ulang sampai ketemu data dari pengguna
+            tcpCliSock.close()  # Akan di close dan dimulai ulang sampai ketemu data dari pengguna
             continue  # Lanjutkan ke iterasi berikutnya (kembali ke awal loop)
 
         # Memastikan data yang diterima memiliki format yang valid
-        request_parts = request_data.split() # split digunakan untuk memisahkan berdasarkan spasi
-        if len(request_parts) < 2: # cek kalau path dari split kurang dari dua
-            print("Invalid HTTP request format.") # kalau kurang print ini
-            tcpCliSock.close() # menutup koneksi klient
+        request_parts = request_data.split()  # split digunakan untuk memisahkan berdasarkan spasi
+        if len(request_parts) < 2:  # cek kalau path dari split kurang dari dua
+            print("Invalid HTTP request format.")  # kalau kurang print ini
+            tcpCliSock.close()  # menutup koneksi klient
             continue  # Lanjutkan ke iterasi berikutnya (kembali ke awal loop)
 
         # Mengambil filename dari permintaan (cache)
@@ -43,37 +43,43 @@ while True:  # Memulai Loop tanpa stop untuk menerima koneksi dari klien
         try:
             # Mengecek cache apakah sudah ada file secara read-binary
             with open(filename, "rb") as f:
-                tcpCliSock.sendall(b"HTTP/1.0 200 OK\r\nContent-Type:text/html\r\n\r\n")
-                # Jika ditemukan, mengirim file header kalau filenya ada dan konten nya berupa text/html
-                tcpCliSock.sendfile(f)
-                # Setelah konten ada, akan dikirim ke client
-            print('Cache loaded')
-            # Menampilkan pesan apabila cache atau file telah ditemukan
+                tcpCliSock.sendall(b"HTTP/1.0 200 OK\r\n\r\n")  # Header sederhana tanpa content-type
+                tcpCliSock.sendfile(f)  # Mengirimkan isi file dari cache
+            print('Cache loaded and sent to client.')
 
         # Cek kalau belum ada cache
         except IOError:
+            print("Cache not found, fetching from origin server.")
             # Apabila tidak ada file pada cache, akan terus meneruskan permintaan ke server asal
             hostn = filename.replace("www.", "", 1)
             # Menghilangkan www dari file agar dapat terhubung ke server yang benar
-            with socket(AF_INET, SOCK_STREAM) as c:
-                # Membuat socket baru bernama c
-                c.connect((hostn, 80))
-                c.sendall(f"GET /{filename} HTTP/1.0\r\nHost: {hostn}\r\n\r\n".encode())
-                # Mengirimkan permintaan HTTP ke server asal untuk meminta file
-                
-                # Setelah dikirim, maka cache file akan diterima data dari server asal dalam potongan 4096 byte.
-                response_data = b"".join(iter(lambda: c.recv(4096), b""))
-                # Membuka file write binary yang memungkinkan menyimpan data biner seperti HTML, Gambar atau lainnya.
-                with open(filename, "wb") as tmpFile:
-                    # Menulis semua data yang telah diterima oleh response_data
-                    tmpFile.write(response_data)
-                
-                # Mengirimkan Data yang sama ke Klien
-                tcpCliSock.sendall(response_data)
-                # Print apabila data berhasil didapatkan dari server dan disimpan pada cache
-                print("Data Downloaded and saved as cache.")
+            try:
+                with socket(AF_INET, SOCK_STREAM) as c:
+                    # Membuat socket baru bernama c
+                    c.connect((hostn, 80))
+                    c.sendall(f"GET /{filename} HTTP/1.0\r\nHost: {hostn}\r\n\r\n".encode())
+                    # Mengirimkan permintaan HTTP ke server asal untuk meminta file
+                    
+                    # Setelah dikirim, menerima respons data dari server asal
+                    response_data = b""
+                    while True:
+                        part = c.recv(4096)
+                        if not part:
+                            break
+                        response_data += part
+                    
+                    # Menyimpan respons sebagai cache untuk permintaan berikutnya
+                    with open(filename, "wb") as tmpFile:
+                        tmpFile.write(response_data)
 
-    # Pesan keluar apabila ada kesalahan
+                    # Mengirimkan respons yang diterima ke klien
+                    tcpCliSock.sendall(response_data)
+                    print("Data downloaded and sent to client. Cache updated.")
+
+            except Exception as e:
+                print("Failed to connect to the origin server:", e)
+                tcpCliSock.sendall(b"HTTP/1.0 404 Not Found\r\n\r\nFile not found")
+
     except Exception as e:
         print("Error:", e)
         tcpCliSock.sendall(b"HTTP/1.0 404 Not Found\r\n\r\nFile not found")
@@ -82,5 +88,5 @@ while True:  # Memulai Loop tanpa stop untuk menerima koneksi dari klien
     finally:
         tcpCliSock.close()
 
-# Menutup koneksi klien saat while Loop berhenti
+# Menutup koneksi server saat loop berhenti
 tcpSerSock.close()
