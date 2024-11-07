@@ -1,0 +1,6 @@
+HTTP/1.0 302 Found
+Location: http://mercusuar.uzone.id
+Server: BigIP
+Connection: close
+Content-Length: 0
+
